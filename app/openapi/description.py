@@ -1,1 +1,1 @@
-DESCRIPTION = "Backend for garage api"
+DESCRIPTION = "Backend for Twitch game api"
