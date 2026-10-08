@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: ./
+    image: garage
+    env_file: [ ./.env ]
+    ports: [ "9881:9881" ]
+    environment:
+      - PORT=9883
+    volumes:
+      - ./:/opt

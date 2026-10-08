@@ -3,7 +3,7 @@ from settings import settings
 
 if __name__ == "__main__":
     run(
-        app="app:application",
+        app="app:get_application",
         host=settings.SERVER.HOST,
         port=settings.SERVER.PORT,
         http="httptools",
