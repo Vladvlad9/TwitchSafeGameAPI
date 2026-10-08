@@ -4,7 +4,9 @@ services:
       context: ./
     image: garage
     env_file: [ ./.env ]
-    ports: [ "9881:9881" ]
+    ports:
+      - "9881:9881"
+      - "4343:4343"
     environment:
       - PORT=9883
     volumes:

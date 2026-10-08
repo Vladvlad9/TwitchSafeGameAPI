@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 
-from app import include_routers, cors_middleware
+from app.lifespan import lifespan
+from app.middleware.cors_middleware import cors_middleware
 from app.openapi import TAGS_METADATA, DESCRIPTION
+from app.routers.setup import include_routers
 from settings import settings
 
 __all__ = ["get_application"]
@@ -15,7 +17,8 @@ def get_application() -> FastAPI:
         contact={
             "name": "Paulechka Uladzislau",
         },
-        openapi_tags=TAGS_METADATA
+        openapi_tags=TAGS_METADATA,
+        lifespan=lifespan,
     )
     cors_middleware(app=app)
     include_routers(app=app)
