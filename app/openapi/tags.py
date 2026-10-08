@@ -1,8 +1,8 @@
 TAGS_METADATA = [
     {
-        "name": "Auth",
+        "name": "Game",
         "description": """
-                    API для аутентификации и авторизации пользователей.
+                    API для игры пользователей.
                 """,
         "externalDocs": {
             "description": "Auth external docs",
