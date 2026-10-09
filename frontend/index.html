@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Twitch Code Game</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0e0e12;
+            color: #f4f4f5;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(145, 70, 255, 0.28), transparent 34%),
+                radial-gradient(circle at 80% 80%, rgba(55, 201, 151, 0.16), transparent 32%),
+                #0e0e12;
+        }
+
+        main {
+            width: min(680px, 100%);
+            padding: 32px;
+            border: 1px solid #2d2d36;
+            border-radius: 22px;
+            background: rgba(24, 24, 31, 0.92);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: clamp(30px, 6vw, 48px);
+        }
+
+        .subtitle {
+            margin: 0 0 28px;
+            color: #aaaab6;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: 1fr 160px auto;
+            gap: 12px;
+        }
+
+        label {
+            display: grid;
+            gap: 7px;
+            color: #c8c8d0;
+            font-size: 13px;
+        }
+
+        input,
+        button {
+            min-height: 46px;
+            border-radius: 11px;
+            font: inherit;
+        }
+
+        input {
+            width: 100%;
+            padding: 0 14px;
+            border: 1px solid #3a3a47;
+            outline: none;
+            background: #111117;
+            color: #fff;
+        }
+
+        input:focus {
+            border-color: #9146ff;
+            box-shadow: 0 0 0 3px rgba(145, 70, 255, 0.18);
+        }
+
+        button {
+            align-self: end;
+            padding: 0 20px;
+            border: 0;
+            cursor: pointer;
+            background: #9146ff;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
+
+        .game {
+            margin-top: 28px;
+            padding: 26px;
+            border-radius: 16px;
+            background: #111117;
+            text-align: center;
+        }
+
+        .status-line {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 9px;
+            color: #aaaab6;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #73737f;
+        }
+
+        .dot.connected,
+        .dot.active {
+            background: #37c997;
+            box-shadow: 0 0 13px rgba(55, 201, 151, 0.75);
+        }
+
+        .winner {
+            min-height: 74px;
+            margin: 22px 0 8px;
+            display: grid;
+            place-items: center;
+            font-size: clamp(28px, 7vw, 54px);
+            font-weight: 800;
+            color: #bf94ff;
+            overflow-wrap: anywhere;
+        }
+
+        .hint,
+        .message {
+            color: #aaaab6;
+            font-size: 14px;
+        }
+
+        .message {
+            min-height: 20px;
+            margin-top: 18px;
+        }
+
+        .message.error {
+            color: #ff7b91;
+        }
+
+        @media (max-width: 620px) {
+            main {
+                padding: 22px;
+            }
+
+            form {
+                grid-template-columns: 1fr;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Twitch Code Game</h1>
+    <p class="subtitle">Задайте код, затем отправьте в Twitch-чат: <strong>!code ваш_код</strong></p>
+
+    <form id="game-form">
+        <label>
+            Секретный код
+            <input id="code" name="code" type="text" required maxlength="128" autocomplete="off" placeholder="Например, 0427">
+        </label>
+
+        <label>
+            Время, секунд
+            <input id="ttl" name="ttl" type="number" required min="1" value="300">
+        </label>
+
+        <button id="start-button" type="submit">Запустить</button>
+    </form>
+
+    <section class="game">
+        <div class="status-line">
+            <span id="status-dot" class="dot"></span>
+            <span id="status">Подключение…</span>
+        </div>
+
+        <div id="winner" class="winner">—</div>
+        <div id="hint" class="hint">Победитель пока не определён</div>
+    </section>
+
+    <div id="message" class="message" role="status"></div>
+</main>
+
+<script>
+    const API_URL = "http://localhost:9881/api/v1/game";
+
+    const form = document.querySelector("#game-form");
+    const codeInput = document.querySelector("#code");
+    const ttlInput = document.querySelector("#ttl");
+    const startButton = document.querySelector("#start-button");
+    const statusElement = document.querySelector("#status");
+    const statusDot = document.querySelector("#status-dot");
+    const winnerElement = document.querySelector("#winner");
+    const hintElement = document.querySelector("#hint");
+    const messageElement = document.querySelector("#message");
+
+    function showMessage(text, isError = false) {
+        messageElement.textContent = text;
+        messageElement.classList.toggle("error", isError);
+    }
+
+    function renderGame(game) {
+        const status = game.status ?? "not_started";
+        const winner = game.winner ?? null;
+
+        statusDot.classList.toggle("active", status === "active");
+
+        if (status === "active") {
+            statusElement.textContent = `Игра активна · осталось ${game.ttl_seconds ?? "?"} сек.`;
+            winnerElement.textContent = "—";
+            hintElement.textContent = "Ждём правильный ответ в Twitch-чате";
+            return;
+        }
+
+        if (status === "finished") {
+            statusElement.textContent = "Игра завершена";
+            winnerElement.textContent = winner || "Победитель неизвестен";
+            hintElement.textContent = "Код угадан!";
+            return;
+        }
+
+        statusElement.textContent = "Игра не запущена";
+        winnerElement.textContent = "—";
+        hintElement.textContent = "Задайте секретный код";
+    }
+
+    async function loadGame() {
+        try {
+            const response = await fetch(`${API_URL}/`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            renderGame(await response.json());
+        } catch (error) {
+            statusElement.textContent = "API недоступен";
+            showMessage(`Не удалось получить состояние: ${error.message}`, true);
+        }
+    }
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        startButton.disabled = true;
+        showMessage("Создаём игру…");
+
+        try {
+            const response = await fetch(`${API_URL}/`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    code: codeInput.value,
+                    ttl_seconds: Number(ttlInput.value),
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const game = await response.json();
+            renderGame(game);
+            codeInput.value = "";
+            showMessage("Игра запущена. Теперь можно писать !code в Twitch-чате.");
+        } catch (error) {
+            showMessage(`Не удалось запустить игру: ${error.message}`, true);
+        } finally {
+            startButton.disabled = false;
+        }
+    });
+
+    const events = new EventSource(`${API_URL}/events`);
+
+    events.addEventListener("open", () => {
+        statusDot.classList.add("connected");
+        showMessage("SSE подключён");
+    });
+
+    events.addEventListener("game.won", (event) => {
+        const data = JSON.parse(event.data);
+        renderGame({
+            status: "finished",
+            winner: data.winner,
+            ttl_seconds: null,
+        });
+        showMessage(`Получено событие победителя: ${data.winner}`);
+    });
+
+    events.addEventListener("error", () => {
+        statusDot.classList.remove("connected");
+        showMessage("SSE переподключается…", true);
+    });
+
+    loadGame();
+</script>
+</body>
+</html>

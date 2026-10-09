@@ -7,7 +7,9 @@ from redis.asyncio import Redis
 
 from src.game.models import GameState, GameStatus, GuessResult
 
-__all__ = ["RedisGameStore"]
+GAME_EVENTS_CHANNEL = "twitch-game:events"
+
+__all__ = ["GAME_EVENTS_CHANNEL", "RedisGameStore"]
 
 
 class RedisGameStore:
@@ -23,6 +25,7 @@ class RedisGameStore:
         'attempts', '0',
         'started_at', ARGV[4]
     )
+    redis.call('EXPIRE', KEYS[1], ARGV[5])
     return 1
     """
 
@@ -51,17 +54,35 @@ class RedisGameStore:
         'winner_name', ARGV[4],
         'finished_at', ARGV[5]
     )
+
+    redis.call('PUBLISH', KEYS[2], cjson.encode({
+        event = 'game.won',
+        game_id = ARGV[1],
+        winner = ARGV[4],
+        finished_at = ARGV[5]
+    }))
     return 2
     """
 
-    def __init__(self, redis: Redis) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        *,
+        event_channel: str = GAME_EVENTS_CHANNEL,
+    ) -> None:
         self._redis = redis
+        self._event_channel = event_channel
 
     async def create_game(
         self,
         code: str,
+        *,
+        ttl_seconds: int = 3600,
     ) -> GameState:
         normalized_code = self._normalize_code(code)
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be greater than zero")
+
         game_id = str(uuid4())
         salt = secrets.token_hex(16)
         started_at = datetime.now(UTC).isoformat()
@@ -75,6 +96,7 @@ class RedisGameStore:
             code_hash,
             salt,
             started_at,
+            ttl_seconds,
         )
         if created != 1:
             raise RuntimeError("Could not create game")
@@ -100,6 +122,10 @@ class RedisGameStore:
             winner_name=data.get("winner_name"),
         )
 
+    async def get_ttl(self) -> int | None:
+        ttl = await self._redis.ttl(self._GAME_KEY)
+        return ttl if ttl >= 0 else None
+
     async def submit_guess(
         self,
         guess: str,
@@ -119,8 +145,9 @@ class RedisGameStore:
         guess_hash = self._hash_code(self._normalize_code(guess), salt)
         result = await self._redis.eval(
             self._SUBMIT_GUESS_SCRIPT,
-            1,
+            2,
             self._GAME_KEY,
+            self._event_channel,
             game_id,
             guess_hash,
             user_id,

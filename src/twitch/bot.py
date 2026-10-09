@@ -15,6 +15,17 @@ SCOPES = twitchio.Scopes(
     user_bot=True,
 )
 
+GUESS_COMMAND = "!code"
+
+
+def extract_guess(message: str) -> str | None:
+    parts = message.strip().split(maxsplit=1)
+    if len(parts) != 2 or parts[0].casefold() != GUESS_COMMAND:
+        return None
+
+    guess = parts[1].strip()
+    return guess or None
+
 
 class OAuthStarletteAdapter(web.StarletteAdapter):
     """Bind inside Docker while keeping the public OAuth callback stable."""
@@ -119,8 +130,12 @@ class TwitchBot(twitchio.Client):
             payload.text,
         )
 
+        guess = extract_guess(payload.text)
+        if guess is None:
+            return
+
         result = await self.game_store.submit_guess(
-            payload.text,
+            guess,
             user_id=str(payload.chatter.id),
             user_name=payload.chatter.name,
         )
