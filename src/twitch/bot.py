@@ -4,6 +4,8 @@ import twitchio
 from starlette.requests import Request
 from twitchio import eventsub, web
 
+from src.game import GuessResult, RedisGameStore
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +50,10 @@ class TwitchBot(twitchio.Client):
         oauth_host: str,
         oauth_port: int,
         redirect_uri: str,
+        game_store: RedisGameStore,
     ) -> None:
         self.broadcaster_id = broadcaster_id
+        self.game_store = game_store
         self._chat_subscribed = False
 
         adapter = OAuthStarletteAdapter(
@@ -114,6 +118,20 @@ class TwitchBot(twitchio.Client):
             payload.chatter.name,
             payload.text,
         )
+
+        result = await self.game_store.submit_guess(
+            payload.text,
+            user_id=str(payload.chatter.id),
+            user_name=payload.chatter.name,
+        )
+
+        if result is GuessResult.INCORRECT:
+            print("[TWITCH GAME] Неправильно", flush=True)
+        elif result is GuessResult.WON:
+            print(
+                f"[TWITCH GAME] Правильно! Победитель: {payload.chatter.name}",
+                flush=True,
+            )
 
     async def event_oauth_authorized(
         self,

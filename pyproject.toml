@@ -9,6 +9,7 @@ dependencies = [
     "httptools>=0.8.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    "redis>=8.1.0",
     "twitchio>=3.3.2",
     "uvicorn>=0.54.0",
     "uvloop>=0.23.0",
